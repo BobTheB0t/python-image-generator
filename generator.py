@@ -1,72 +1,106 @@
 import os
-from PIL import Image, ImageDraw, ImageFont
-import textwrap
+import requests
+from PIL import Image, ImageDraw
+from io import BytesIO
+import random
 
-class ImageGenerator:
-    def __init__(self, output_dir="generated_images", font_path="fonts/arial.ttf", font_size=40, text_color=(0, 0, 0)):
-        """
-        Initialize the ImageGenerator with default settings.
+# Constants
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DALLE_ENDPOINT = "https://api.openai.com/v1/images/generations"
+RANDOM_COLOR_MODE = "random_color"
+DALLE_MODE = "dalle"
 
-        :param output_dir: Directory to save generated images
-        :param font_path: Path to the font file
-        :param font_size: Font size for the text
-        :param text_color: Text color in RGB format
-        """
-        self.output_dir = output_dir
-        self.font_path = font_path
-        self.font_size = font_size
-        self.text_color = text_color
+def generate_image(prompt, mode=DALLE_MODE, output_path="output", file_name="generated_image"):
+    """
+    Generate an image based on the given prompt and mode.
 
-        # Ensure the output directory exists
-        os.makedirs(self.output_dir, exist_ok=True)
+    Args:
+        prompt (str): The prompt to generate the image from.
+        mode (str): The mode to use for image generation. Can be 'dalle' or 'random_color'.
+        output_path (str): The path to save the generated image.
+        file_name (str): The name of the generated image file.
 
-        # Load the font
-        try:
-            self.font = ImageFont.truetype(self.font_path, self.font_size)
-        except IOError:
-            raise FileNotFoundError(f"Font file not found at {self.font_path}")
+    Returns:
+        str: The path to the generated image file.
+    """
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
 
-    def generate_image(self, prompt, size=500, background_color=(255, 255, 255)):
-        """
-        Generate a square image with the given prompt.
+    file_path = os.path.join(output_path, f"{file_name}.png")
 
-        :param prompt: Text to be displayed on the image
-        :param size: Size of the square image
-        :param background_color: Background color in RGB format
-        :return: Path to the saved image
-        """
-        try:
-            # Create a new image with the specified size and background color
-            image = Image.new("RGB", (size, size), background_color)
-            draw = ImageDraw.Draw(image)
+    try:
+        if mode == DALLE_MODE:
+            if not OPENAI_API_KEY:
+                raise ValueError("OPENAI_API_KEY environment variable is not set.")
+            image_data = generate_image_with_dalle(prompt)
+        elif mode == RANDOM_COLOR_MODE:
+            image_data = generate_random_color_image()
+        else:
+            raise ValueError(f"Invalid mode: {mode}")
 
-            # Wrap the text to fit within the image
-            lines = textwrap.wrap(prompt, width=20)
+        with open(file_path, "wb") as f:
+            f.write(image_data)
+        return file_path
+    except Exception as e:
+        print(f"Error generating image: {e}")
+        return None
 
-            # Calculate the total height of the text
-            total_height = len(lines) * self.font_size
+def generate_image_with_dalle(prompt):
+    """
+    Generate an image using OpenAI's DALL·E.
 
-            # Calculate the starting y-coordinate to center the text
-            y = (size - total_height) // 2
+    Args:
+        prompt (str): The prompt to generate the image from.
 
-            # Draw each line of text
-            for line in lines:
-                text_width, text_height = draw.textsize(line, font=self.font)
-                x = (size - text_width) // 2
-                draw.text((x, y), line, font=self.font, fill=self.text_color)
-                y += text_height
+    Returns:
+        bytes: The image data in bytes.
+    """
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {OPENAI_API_KEY}"
+    }
+    data = {
+        "prompt": prompt,
+        "n": 1,
+        "size": "1024x1024"
+    }
+    response = requests.post(DALLE_ENDPOINT, headers=headers, json=data)
+    response.raise_for_status()
+    image_url = response.json()["data"][0]["url"]
+    image_response = requests.get(image_url)
+    image_response.raise_for_status()
+    return image_response.content
 
-            # Save the image
-            image_path = os.path.join(self.output_dir, f"{prompt[:20]}_{size}.png")
-            image.save(image_path)
-            return image_path
+def generate_random_color_image():
+    """
+    Generate a random color image.
 
-        except Exception as e:
-            raise RuntimeError(f"Failed to generate image: {e}")
+    Returns:
+        bytes: The image data in bytes.
+    """
+    width, height = 1024, 1024
+    image = Image.new("RGB", (width, height), color=get_random_color())
+    buffered = BytesIO()
+    image.save(buffered, format="PNG")
+    return buffered.getvalue()
 
-# Example usage
+def get_random_color():
+    """
+    Generate a random color.
+
+    Returns:
+        tuple: A tuple representing the RGB color.
+    """
+    return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+
 if __name__ == "__main__":
-    generator = ImageGenerator()
-    prompt = "Hello, this is a test image generated using Python!"
-    image_path = generator.generate_image(prompt)
-    print(f"Image saved at: {image_path}")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate images from prompts.")
+    parser.add_argument("prompt", type=str, help="The prompt to generate the image from.")
+    parser.add_argument("--mode", type=str, choices=[DALLE_MODE, RANDOM_COLOR_MODE], default=DALLE_MODE, help="The mode to use for image generation.")
+    parser.add_argument("--output", type=str, default="output", help="The path to save the generated image.")
+    parser.add_argument("--file_name", type=str, default="generated_image", help="The name of the generated image file.")
+
+    args = parser.parse_args()
+    generate_image(args.prompt, args.mode, args.output, args.file_name)
