@@ -1,72 +1,61 @@
+import os
 import random
-from typing import Tuple
-from PIL import Image
+from PIL import Image, ImageDraw
 
-class ImageGenerator:
-    """Generates random color square images based on user prompts."""
+# Constants
+DEFAULT_SIZE = (500, 500)  # Default size of the generated image
+DEFAULT_COLOR_COUNT = 1    # Default number of colors in the image
+OUTPUT_DIR = '/sdcard/downloads'  # Default output directory
 
-    def __init__(self, output_dir: str = 'output'):
-        """
-        Initialize the image generator.
+def generate_random_color():
+    """Generate a random RGB color."""
+    return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
-        Args:
-            output_dir: Directory to save generated images
-        """
-        self.output_dir = output_dir
-        # Ensure output directory exists
-        from pathlib import Path
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
+def create_color_square(size, color):
+    """Create an image with a single color square."""
+    image = Image.new('RGB', size, color)
+    return image
 
-    def generate_random_color(self) -> Tuple[int, int, int]:
-        """Generate a random RGB color tuple."""
-        return tuple(random.randint(0, 255) for _ in range(3))
+def save_image(image, filename):
+    """Save the image to the specified filename."""
+    try:
+        image.save(filename)
+        print(f"Image saved successfully to {filename}")
+    except Exception as e:
+        print(f"Error saving image: {e}")
 
-    def create_color_square(self, size: int, color: Tuple[int, int, int]) -> Image.Image:
-        """
-        Create a solid color square image.
-
-        Args:
-            size: Size of the square image (width = height)
-            color: RGB color tuple
-
-        Returns:
-            PIL Image object
-        """
+def generate_image(size=DEFAULT_SIZE, color_count=DEFAULT_COLOR_COUNT, output_dir=OUTPUT_DIR):
+    """Generate an image with random color squares and save it to the specified directory."""
+    # Ensure the output directory exists
+    if not os.path.exists(output_dir):
         try:
-            # Create a new image with the specified color
-            img = Image.new('RGB', (size, size), color=color)
-            return img
+            os.makedirs(output_dir)
         except Exception as e:
-            raise RuntimeError(f"Failed to create image: {str(e)}")
+            print(f"Error creating directory: {e}")
+            return
 
-    def save_image(self, image: Image.Image, filename: str) -> None:
-        """
-        Save the image to the output directory.
+    # Generate the image
+    if color_count == 1:
+        color = generate_random_color()
+        image = create_color_square(size, color)
+    else:
+        # For multiple colors, divide the image into equal parts
+        width, height = size
+        part_width = width // color_count
+        image = Image.new('RGB', size)
+        draw = ImageDraw.Draw(image)
+        for i in range(color_count):
+            color = generate_random_color()
+            left = i * part_width
+            right = (i + 1) * part_width if i < color_count - 1 else width
+            draw.rectangle([left, 0, right, height], fill=color)
 
-        Args:
-            image: PIL Image object to save
-            filename: Name of the file to save (including extension)
-        """
-        try:
-            filepath = f"{self.output_dir}/{filename}"
-            image.save(filepath)
-            print(f"Image saved: {filepath}")
-        except Exception as e:
-            print(f"Error saving image: {str(e)}")
-
-    def generate_image(self, size: int = 500, filename: str = 'random_square.png') -> None:
-        """
-        Generate and save a random color square image.
-
-        Args:
-            size: Size of the square image (default: 500px)
-            filename: Output filename (default: random_square.png)
-        """
-        color = self.generate_random_color()
-        image = self.create_color_square(size, color)
-        self.save_image(image, filename)
+    # Generate a unique filename
+    filename = os.path.join(output_dir, f"color_square_{random.randint(1000, 9999)}.png")
+    
+    # Save the image
+    save_image(image, filename)
 
 if __name__ == "__main__":
     # Example usage
-    generator = ImageGenerator()
-    generator.generate_image(size=300, filename='example_square.png')
+    generate_image(size=(600, 400), color_count=3)
