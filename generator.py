@@ -1,106 +1,72 @@
-import os
-import requests
-from PIL import Image, ImageDraw
-from io import BytesIO
 import random
+from typing import Tuple
+from PIL import Image
 
-# Constants
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-DALLE_ENDPOINT = "https://api.openai.com/v1/images/generations"
-RANDOM_COLOR_MODE = "random_color"
-DALLE_MODE = "dalle"
+class ImageGenerator:
+    """Generates random color square images based on user prompts."""
 
-def generate_image(prompt, mode=DALLE_MODE, output_path="output", file_name="generated_image"):
-    """
-    Generate an image based on the given prompt and mode.
+    def __init__(self, output_dir: str = 'output'):
+        """
+        Initialize the image generator.
 
-    Args:
-        prompt (str): The prompt to generate the image from.
-        mode (str): The mode to use for image generation. Can be 'dalle' or 'random_color'.
-        output_path (str): The path to save the generated image.
-        file_name (str): The name of the generated image file.
+        Args:
+            output_dir: Directory to save generated images
+        """
+        self.output_dir = output_dir
+        # Ensure output directory exists
+        from pathlib import Path
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    Returns:
-        str: The path to the generated image file.
-    """
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
+    def generate_random_color(self) -> Tuple[int, int, int]:
+        """Generate a random RGB color tuple."""
+        return tuple(random.randint(0, 255) for _ in range(3))
 
-    file_path = os.path.join(output_path, f"{file_name}.png")
+    def create_color_square(self, size: int, color: Tuple[int, int, int]) -> Image.Image:
+        """
+        Create a solid color square image.
 
-    try:
-        if mode == DALLE_MODE:
-            if not OPENAI_API_KEY:
-                raise ValueError("OPENAI_API_KEY environment variable is not set.")
-            image_data = generate_image_with_dalle(prompt)
-        elif mode == RANDOM_COLOR_MODE:
-            image_data = generate_random_color_image()
-        else:
-            raise ValueError(f"Invalid mode: {mode}")
+        Args:
+            size: Size of the square image (width = height)
+            color: RGB color tuple
 
-        with open(file_path, "wb") as f:
-            f.write(image_data)
-        return file_path
-    except Exception as e:
-        print(f"Error generating image: {e}")
-        return None
+        Returns:
+            PIL Image object
+        """
+        try:
+            # Create a new image with the specified color
+            img = Image.new('RGB', (size, size), color=color)
+            return img
+        except Exception as e:
+            raise RuntimeError(f"Failed to create image: {str(e)}")
 
-def generate_image_with_dalle(prompt):
-    """
-    Generate an image using OpenAI's DALL·E.
+    def save_image(self, image: Image.Image, filename: str) -> None:
+        """
+        Save the image to the output directory.
 
-    Args:
-        prompt (str): The prompt to generate the image from.
+        Args:
+            image: PIL Image object to save
+            filename: Name of the file to save (including extension)
+        """
+        try:
+            filepath = f"{self.output_dir}/{filename}"
+            image.save(filepath)
+            print(f"Image saved: {filepath}")
+        except Exception as e:
+            print(f"Error saving image: {str(e)}")
 
-    Returns:
-        bytes: The image data in bytes.
-    """
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {OPENAI_API_KEY}"
-    }
-    data = {
-        "prompt": prompt,
-        "n": 1,
-        "size": "1024x1024"
-    }
-    response = requests.post(DALLE_ENDPOINT, headers=headers, json=data)
-    response.raise_for_status()
-    image_url = response.json()["data"][0]["url"]
-    image_response = requests.get(image_url)
-    image_response.raise_for_status()
-    return image_response.content
+    def generate_image(self, size: int = 500, filename: str = 'random_square.png') -> None:
+        """
+        Generate and save a random color square image.
 
-def generate_random_color_image():
-    """
-    Generate a random color image.
-
-    Returns:
-        bytes: The image data in bytes.
-    """
-    width, height = 1024, 1024
-    image = Image.new("RGB", (width, height), color=get_random_color())
-    buffered = BytesIO()
-    image.save(buffered, format="PNG")
-    return buffered.getvalue()
-
-def get_random_color():
-    """
-    Generate a random color.
-
-    Returns:
-        tuple: A tuple representing the RGB color.
-    """
-    return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        Args:
+            size: Size of the square image (default: 500px)
+            filename: Output filename (default: random_square.png)
+        """
+        color = self.generate_random_color()
+        image = self.create_color_square(size, color)
+        self.save_image(image, filename)
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Generate images from prompts.")
-    parser.add_argument("prompt", type=str, help="The prompt to generate the image from.")
-    parser.add_argument("--mode", type=str, choices=[DALLE_MODE, RANDOM_COLOR_MODE], default=DALLE_MODE, help="The mode to use for image generation.")
-    parser.add_argument("--output", type=str, default="output", help="The path to save the generated image.")
-    parser.add_argument("--file_name", type=str, default="generated_image", help="The name of the generated image file.")
-
-    args = parser.parse_args()
-    generate_image(args.prompt, args.mode, args.output, args.file_name)
+    # Example usage
+    generator = ImageGenerator()
+    generator.generate_image(size=300, filename='example_square.png')
